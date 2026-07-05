@@ -767,16 +767,18 @@ function modeAgg(name, mode){
   var last=MONTHS[MONTHS.length-1], lmd=MONTHLY[last];
   var ck=getConfirmedKey(), ok=getOngoingKey();
   var mns=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  var agg, extra=0, rangeLabel='', droppingKeys=[], modeLbl='';
+  var agg, extra=0, rangeLabel='', droppingKeys=[], modeLbl='', targetMonthWeeks=0, targetMonthName='';
   if(mode==='current'){
     agg=aggregate(name, rollingStart(ck), ck);
     rangeLabel=rollingStart(ck)+' ~ '+ck+' 확정 ('+agg.totalWeeks+'주)';
     modeLbl=mns[parseKeyStr(ck).month]+' 확정';
+    targetMonthWeeks=MONTHLY[ck].fullWeeks; targetMonthName=mns[parseKeyStr(ck).month];
   } else if(ok && mode===ok){
     agg=aggregate(name, rollingStart(ok), ok);
     extra=agg.remainWeeks;
     rangeLabel=rollingStart(ok)+' ~ '+ok+' 진행중 ('+agg.totalWeeks+'주 + 남은 '+agg.remainWeeks+'주)';
     modeLbl=mns[parseKeyStr(ok).month]+' 예상';
+    targetMonthWeeks=MONTHLY[ok].fullWeeks; targetMonthName=mns[parseKeyStr(ok).month];
   } else {
     var predEnd=mode, predStart=rollingStart(predEnd), curStart=rollingStart(last);
     var realStart = predStart>(MONTHS[0]||'') ? predStart : (MONTHS[0]||predStart);
@@ -793,8 +795,10 @@ function modeAgg(name, mode){
     });
     rangeLabel=realStart+' ~ '+predEnd+' 예측 ('+(agg.totalWeeks+extra)+'주)';
     modeLbl=mns[pe.month]+' 예상';
+    targetMonthWeeks=countDOW(pe.year, pe.month, DOW); targetMonthName=mns[pe.month];
   }
-  return {agg:agg, extra:extra, rangeLabel:rangeLabel, droppingKeys:droppingKeys, modeLbl:modeLbl};
+  return {agg:agg, extra:extra, rangeLabel:rangeLabel, droppingKeys:droppingKeys, modeLbl:modeLbl,
+    targetMonthWeeks:targetMonthWeeks, targetMonthName:targetMonthName};
 }
 function updatePersonal(){
   if(!selName) return;
@@ -823,7 +827,7 @@ function updatePersonal(){
     '<span style="font-size:11px;color:var(--mut)">'+(extra>0?'남은 '+extra+'주 동안 더 해야 해요':'현재 확정 점수')+'</span>';
 
   renderActTable(agg, score, extra);
-  renderFeedback(agg, score, extra, m.droppingKeys);
+  renderFeedback(agg, score, extra, m.droppingKeys, m.targetMonthWeeks, m.targetMonthName);
 }
 
 // ── 부족분 역산 ───────────────────────────────────────────────
@@ -873,7 +877,7 @@ function computeChoices(agg, score, extra, target){
   for(var j=0;j<sorted.length;j++){ cum+=sorted[j].pts; mn++; if(cum>=gap) break; }
   return {gap:gap,choices:ch,min:mn,done:false};
 }
-function renderFeedback(agg, score, extra, droppingKeys){
+function renderFeedback(agg, score, extra, droppingKeys, targetMonthWeeks, targetMonthName){
   var light=getLight(score.total);
   var rPW=agg.totalWeeks>0?(agg.RGI+agg.RGO)/agg.totalWeeks:0;
   var vPW=agg.totalWeeks>0?agg.V/agg.totalWeeks:0;
@@ -881,7 +885,10 @@ function renderFeedback(agg, score, extra, droppingKeys){
   var fbCls=light==='Grey'?'grey':light==='Red'?'red':light==='Amber'?'amber':'green';
   var ftCls=light==='Grey'?'ftg':light==='Red'?'ftr':light==='Amber'?'fta':'ftg2';
   var dropLine=droppingKeys.length>0?'<div class="fb-row"><span class="fb-ico">⚠️</span><span class="fb-txt">빠지는 달('+droppingKeys.map(keyLabel).join(', ')+') 영향 반영</span></div>':'';
+  var monthLine = targetMonthWeeks ?
+    '<div class="fb-row"><span class="fb-ico">📅</span><span class="fb-txt"><b>'+targetMonthName+'에는 수요일이 총 '+targetMonthWeeks+'회</b> 있어요 — 출결에 문제없다는 전제로 아래 목표를 계산했어요</span></div>' : '';
   var html='<div class="fb-box fb-'+fbCls+'"><div class="fb-title '+ftCls+'">💡 현재 활동 페이스</div>'+
+    monthLine+
     '<div class="fb-row"><span class="fb-ico">📈</span><span class="fb-txt">주당 평균 — 리퍼럴 '+rPW.toFixed(2)+'건 / 비지터 '+vPW.toFixed(2)+'명 / 1:1 '+oPW.toFixed(2)+'건</span></div>'+
     (extra>0?'<div class="fb-row"><span class="fb-ico">⏰</span><span class="fb-txt">남은 <b>'+extra+'주</b> 기준 피드백이에요</span></div>':'')+
     dropLine+'</div>';
@@ -940,6 +947,9 @@ function buildFeedbackText(name, mode){
   lines.push('트래픽 라이트 피드백 ('+m.modeLbl+')');
   lines.push('');
   lines.push(lkor(light)+' '+score.total+'점');
+  if(m.targetMonthWeeks){
+    lines.push('📅 '+m.targetMonthName+'에는 수요일이 총 '+m.targetMonthWeeks+'회 있어요 (출결 문제없다는 전제로 계산)');
+  }
   lines.push('');
   function pushTarget(label, target){
     var r=computeChoices(agg, score, extra, target);
