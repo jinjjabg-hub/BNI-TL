@@ -394,14 +394,21 @@ function fetchMonth(y, m){
     ' '+y+'-'+mm,   // 2026-06 (앞 공백)
     y+'-'+m+' '     // 2026-6 (뒤 공백)
   ];
+  var errs = [];
   function tryAt(i){
-    if(i >= names.length) return Promise.resolve(null);
+    if(i >= names.length) return Promise.resolve({md:null, errs:errs});
     return fetch(gvizUrl(names[i])).then(function(res){
-      if(!res.ok) throw new Error('http '+res.status);
+      if(!res.ok){ errs.push(names[i]+': http '+res.status); throw new Error('http'); }
       return res.text();
     }).then(function(txt){
-      var md = parseMonthRows(tableToRows(parseGvizText(txt)), y, m);
-      return md ? md : tryAt(i+1);
+      var table;
+      try { table = parseGvizText(txt); }
+      catch(e){ errs.push(names[i]+': '+e.message); return tryAt(i+1); }
+      var md;
+      try { md = parseMonthRows(tableToRows(table), y, m); }
+      catch(e){ errs.push(names[i]+': 파싱실패 '+e.message); return tryAt(i+1); }
+      if(!md){ errs.push(names[i]+': 응답은 받았으나 멤버 데이터 인식 실패'); return tryAt(i+1); }
+      return {md:md, errs:errs};
     }).catch(function(){ return tryAt(i+1); });
   }
   return tryAt(0);
@@ -410,7 +417,7 @@ function syncFromSheet(){
   setSyncUI('loading');
   var cands = candidateMonths();
   return Promise.all(cands.map(function(c){
-    return fetchMonth(c.y, c.m).then(function(md){ return {c:c, md:md}; });
+    return fetchMonth(c.y, c.m).then(function(r){ return {c:c, md:r.md, errs:r.errs}; });
   }))
     .then(function(results){
       var monthly = {};
@@ -428,9 +435,9 @@ function syncFromSheet(){
       var missing = [];
       results.forEach(function(r){
         var k = toKey(r.c.y, r.c.m);
-        if(!monthly[k] && k > firstLoaded && k < thisKey) missing.push(k);
+        if(!monthly[k] && k > firstLoaded && k < thisKey) missing.push({key:k, reasons:r.errs});
       });
-      missing.sort();
+      missing.sort(function(a,b){ return a.key<b.key?-1:1; });
       var cache = { ts: Date.now(), monthly: monthly, missing: missing };
       try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch(e){}
       applyData(cache, true);
@@ -463,9 +470,16 @@ function renderMissing(missing){
   if(!el) return;
   if(!missing || !missing.length){ el.style.display='none'; return; }
   el.style.display='block';
-  el.innerHTML = '⚠️ <b>못 읽은 탭: '+missing.join(', ')+'</b><br>'+
-    '이 달 데이터가 계산에서 빠졌어요. 구글시트에서 해당 탭 이름이 정확히 <b>'+missing[0]+
-    '</b> 인지 확인해 주세요 (앞뒤 공백·오타 주의). 고친 뒤 <b>↻ 동기화</b>를 눌러주세요.';
+  var keys = missing.map(function(m){ return m.key; });
+  var detailHtml = missing.map(function(m){
+    var rs = (m.reasons||[]).slice(-3); // 마지막 3개 시도 사유만 (너무 길지 않게)
+    return '<div style="margin-top:6px;font-size:11px;color:inherit;opacity:.85">'+
+      '<b>'+m.key+'</b> 시도 결과: '+(rs.length ? rs.join(' / ') : '알 수 없음')+
+      '</div>';
+  }).join('');
+  el.innerHTML = '⚠️ <b>못 읽은 탭: '+keys.join(', ')+'</b><br>'+
+    '이 달 데이터가 계산에서 빠졌어요. 아래는 앱이 실제로 시도하며 받은 응답이에요:'+
+    detailHtml;
 }
 function fmtTs(ts){
   var d = new Date(ts);
