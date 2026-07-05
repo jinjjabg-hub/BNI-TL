@@ -213,6 +213,7 @@ tbody td { padding: 8px 9px; font-size: 12px; white-space: nowrap; }
       </div>
       <div class="pcard" id="pcard"></div>
       <div class="sec">📋 활동 현황</div>
+      <div id="actnote"></div>
       <div class="awrap"><table class="atable" id="atable"></table></div>
       <div class="nacard" id="nacard"></div>
       <button class="copybtn" id="copybtn">📋 카톡 피드백 복사</button>
@@ -906,14 +907,17 @@ function renderFeedback(agg, score, extra, droppingKeys){
 function renderActTable(agg, score, extra){
   var tw=agg.totalWeeks+extra;
   var rows=[
-    {name:'출석/결석',cur:'출석 '+agg.P+'회 / 결석 '+agg.A+'회',need:null,std:'결석 0회→15점'},
-    {name:'지각',cur:agg.L+'회',need:null,std:'지각 0회→10점'},
-    {name:'리퍼럴(T1+T2)',cur:(agg.RGI+agg.RGO)+'건',need:Math.max(0,Math.ceil(1.2*tw)-(agg.RGI+agg.RGO)),unit:'건',std:'목표 '+Math.ceil(1.2*tw)+'건 (주당 1.2건)'},
-    {name:'비지터',cur:agg.V+'명',need:Math.max(0,Math.ceil(0.6*tw)-agg.V),unit:'명',std:'목표 '+Math.ceil(0.6*tw)+'명 (주당 0.6명)'},
-    {name:'1:1 원투원',cur:agg.M121+'건',need:Math.max(0,Math.ceil(2*tw)-agg.M121),unit:'건',std:'목표 '+Math.ceil(2*tw)+'건 (주당 2건)'},
+    {name:'출석/결석',cur:'출석 '+agg.P+'회 / 결석 '+agg.A+'회',need:null,std:'결석 0회 유지 시 15점 (총 '+tw+'주 기준)'},
+    {name:'지각',cur:agg.L+'회',need:null,std:'지각 0회 유지 시 10점 (총 '+tw+'주 기준)'},
+    {name:'리퍼럴(T1+T2)',cur:(agg.RGI+agg.RGO)+'건',need:Math.max(0,Math.ceil(1.2*tw)-(agg.RGI+agg.RGO)),unit:'건',std:'목표 '+Math.ceil(1.2*tw)+'건 (총 '+tw+'주 × 주당 1.2건)'},
+    {name:'비지터',cur:agg.V+'명',need:Math.max(0,Math.ceil(0.6*tw)-agg.V),unit:'명',std:'목표 '+Math.ceil(0.6*tw)+'명 (총 '+tw+'주 × 주당 0.6명)'},
+    {name:'1:1 원투원',cur:agg.M121+'건',need:Math.max(0,Math.ceil(2*tw)-agg.M121),unit:'건',std:'목표 '+Math.ceil(2*tw)+'건 (총 '+tw+'주 × 주당 2건)'},
     {name:'감사장',cur:won(agg.N),need:agg.N>=100000000?0:null,std:'목표 1억 이상'},
     {name:'교육점수',cur:agg.O+'점',need:Math.max(0,20-agg.O),unit:'점',std:'목표 20점'}
   ];
+  var noteHtml = extra>0 ?
+    '<div style="font-size:11.5px;color:var(--mut);margin-bottom:8px;line-height:1.6">🎯 모든 목표는 <b>이 기간에 실제 열린(열릴) 미팅 총 '+tw+'주</b> 기준으로 계산돼요. 출결 점수는 <b>앞으로 결석·지각이 없다는 전제</b>로, 지금까지 실제 기록만 반영해요.</div>' : '';
+  $('actnote').innerHTML = noteHtml;
   var html='<thead><tr><th>항목</th><th>현재 누적</th><th>더 필요</th><th>그린 기준</th></tr></thead><tbody>';
   rows.forEach(function(row){
     var nd = row.need===null?'<span class="cmut">—</span>':
