@@ -288,7 +288,7 @@ function parseGvizText(txt){
   if(a<0 || b<0) throw new Error('gviz 형식 아님');
   var obj = JSON.parse(txt.slice(a+1, b));
   if(obj.status !== 'ok') throw new Error('sheet-missing');
-  return obj.table;
+  return {table: obj.table, sig: obj.sig};
 }
 function cellVal(row, i){
   if(!row || !row.c || !row.c[i]) return '';
@@ -439,19 +439,19 @@ function fetchMonth(y, m){
   ];
   var errs = [];
   function tryAt(i){
-    if(i >= names.length) return Promise.resolve({md:null, errs:errs});
+    if(i >= names.length) return Promise.resolve({md:null, sig:null, errs:errs});
     return fetch(gvizUrl(names[i])).then(function(res){
       if(!res.ok){ errs.push(names[i]+': http '+res.status); throw new Error('http'); }
       return res.text();
     }).then(function(txt){
-      var table;
-      try { table = parseGvizText(txt); }
+      var parsed;
+      try { parsed = parseGvizText(txt); }
       catch(e){ errs.push(names[i]+': '+e.message); return tryAt(i+1); }
       var md;
-      try { md = parseMonthRows(tableToRows(table), y, m); }
+      try { md = parseMonthRows(tableToRows(parsed.table), y, m); }
       catch(e){ errs.push(names[i]+': 파싱실패 '+e.message); return tryAt(i+1); }
       if(!md){ errs.push(names[i]+': 응답은 받았으나 멤버 데이터 인식 실패'); return tryAt(i+1); }
-      return {md:md, errs:errs};
+      return {md:md, sig:parsed.sig, errs:errs};
     }).catch(function(){ return tryAt(i+1); });
   }
   return tryAt(0);
@@ -460,9 +460,21 @@ function syncFromSheet(){
   setSyncUI('loading');
   var cands = candidateMonths();
   return Promise.all(cands.map(function(c){
-    return fetchMonth(c.y, c.m).then(function(r){ return {c:c, md:r.md, errs:r.errs}; });
+    return fetchMonth(c.y, c.m).then(function(r){ return {c:c, md:r.md, sig:r.sig, errs:r.errs}; });
   }))
     .then(function(results){
+      // ★ 위조 탭 감지: 존재하지 않는 탭을 요청하면 구글이 에러 대신 엉뚱한 탭을 대신 주는 경우가 있음.
+      //   서로 다른 달인데 서명(sig)이 겹치면 → 둘 다 가짜(같은 탭이 잘못 재사용된 것)로 간주해 제외.
+      var sigCount = {};
+      results.forEach(function(r){ if(r.md && r.sig){ sigCount[r.sig] = (sigCount[r.sig]||0)+1; } });
+      var fakeKeys = [];
+      results.forEach(function(r){
+        if(r.md && r.sig && sigCount[r.sig] > 1){
+          fakeKeys.push(toKey(r.c.y, r.c.m));
+          r.md = null;
+          r.errs = (r.errs||[]).concat(['위조탭 감지: 다른 달과 서명(sig) 중복 — 존재하지 않는 탭 요청 시 구글이 대신 내려준 엉뚱한 데이터로 판단']);
+        }
+      });
       var monthly = {};
       results.forEach(function(r){ if(r.md) monthly[toKey(r.md.year, r.md.month)] = r.md; });
       var keys = Object.keys(monthly).sort();
