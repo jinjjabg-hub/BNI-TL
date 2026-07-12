@@ -200,7 +200,7 @@ tbody td { padding: 8px 9px; font-size: 12px; white-space: nowrap; }
       </div>
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table>
-          <thead><tr><th>멤버</th><th>주수</th><th>출결</th><th>리퍼럴</th><th>비지터</th><th>1:1</th><th>감사장</th><th>교육</th><th>점수</th><th>상태</th></tr></thead>
+          <thead><tr><th>멤버</th><th>주수</th><th>출결</th><th>리퍼럴</th><th>비지터</th><th>1:1</th><th>감사장</th><th>교육</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
       </div>
@@ -703,20 +703,20 @@ function renderTable(){
     function gc(v,max){ return v>=max?'var(--g)':v>0?'var(--a)':'var(--r)'; }
     var tr=document.createElement('tr');
     tr.innerHTML =
-      '<td><strong>'+name+'</strong></td>'+
+      '<td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>'+name+'</strong>'+
+      '<span style="font-weight:900;font-size:13px;color:'+color+'">'+s.total+'</span>'+
+      '<span class="badge '+light+'" style="font-size:10px;padding:1px 6px">'+lkor(light)+'</span></div></td>'+
       '<td style="text-align:center;font-size:11px;color:var(--mut)">'+agg.totalWeeks+'주</td>'+
       '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">결'+agg.A+'/지'+agg.L+'</div><div style="font-weight:700;color:'+gc(absScore,25)+'">'+absScore+'점</div></td>'+
       '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+(agg.RGI+agg.RGO)+'건</div><div style="font-weight:700;color:'+gc(s.bd.ref,20)+'">'+s.bd.ref+'점</div></td>'+
       '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.V+'명</div><div style="font-weight:700;color:'+gc(s.bd.vis,20)+'">'+s.bd.vis+'점</div></td>'+
       '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.M121+'건</div><div style="font-weight:700;color:'+gc(s.bd.otwone,10)+'">'+s.bd.otwone+'점</div></td>'+
       '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+(agg.N>0?agg.N.toLocaleString('ko-KR'):'0')+'</div><div style="font-weight:700;color:'+gc(s.bd.tyfcb,15)+'">'+s.bd.tyfcb+'점</div></td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.O+'점</div><div style="font-weight:700;color:'+gc(s.bd.train,10)+'">'+s.bd.train+'점</div></td>'+
-      '<td style="text-align:center;font-size:17px;font-weight:900;color:'+color+'">'+s.total+'</td>'+
-      '<td><span class="badge '+light+'">'+lkor(light)+'</span></td>';
+      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.O+'점</div><div style="font-weight:700;color:'+gc(s.bd.train,10)+'">'+s.bd.train+'점</div></td>';
     tr.addEventListener('click', function(){ goPersonal(name); });
     tb.appendChild(tr);
   });
-  if(!tb.children.length) tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--mut)">해당 조건의 멤버 없음</td></tr>';
+  if(!tb.children.length) tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mut)">해당 조건의 멤버 없음</td></tr>';
 }
 function setFilter(f,btn){
   curFilter=f;
@@ -949,23 +949,25 @@ function renderFeedback(agg, score, extra, droppingKeys, targetMonthWeeks, targe
 function renderActTable(agg, score, extra){
   var tw=agg.totalWeeks+extra;
   var rows=[
-    {name:'출석/결석',cur:'출석 '+agg.P+'회 / 결석 '+agg.A+'회',need:null,std:'결석 0회 유지 시 15점 (총 '+tw+'주 기준)'},
-    {name:'지각',cur:agg.L+'회',need:null,std:'지각 0회 유지 시 10점 (총 '+tw+'주 기준)'},
-    {name:'리퍼럴(T1+T2)',cur:(agg.RGI+agg.RGO)+'건',need:Math.max(0,Math.ceil(1.2*tw)-(agg.RGI+agg.RGO)),unit:'건',std:'목표 '+Math.ceil(1.2*tw)+'건 (총 '+tw+'주 × 주당 1.2건)'},
-    {name:'비지터',cur:agg.V+'명',need:Math.max(0,Math.ceil(0.6*tw)-agg.V),unit:'명',std:'목표 '+Math.ceil(0.6*tw)+'명 (총 '+tw+'주 × 주당 0.6명)'},
-    {name:'1:1 원투원',cur:agg.M121+'건',need:Math.max(0,Math.ceil(2*tw)-agg.M121),unit:'건',std:'목표 '+Math.ceil(2*tw)+'건 (총 '+tw+'주 × 주당 2건)'},
-    {name:'감사장',cur:won(agg.N),need:agg.N>=100000000?0:null,std:'목표 1억 이상'},
-    {name:'교육점수',cur:agg.O+'점',need:Math.max(0,20-agg.O),unit:'점',std:'목표 20점'}
+    {name:'출석/결석',cur:'출석 '+agg.P+'회 / 결석 '+agg.A+'회',pts:score.bd.abs,max:15,need:null,std:'결석 0회 유지 시 15점 (총 '+tw+'주 기준)'},
+    {name:'지각',cur:agg.L+'회',pts:score.bd.time,max:10,need:null,std:'지각 0회 유지 시 10점 (총 '+tw+'주 기준)'},
+    {name:'리퍼럴(T1+T2)',cur:(agg.RGI+agg.RGO)+'건',pts:score.bd.ref,max:20,need:Math.max(0,Math.ceil(1.2*tw)-(agg.RGI+agg.RGO)),unit:'건',std:'목표 '+Math.ceil(1.2*tw)+'건 (총 '+tw+'주 × 주당 1.2건)'},
+    {name:'비지터',cur:agg.V+'명',pts:score.bd.vis,max:20,need:Math.max(0,Math.ceil(0.6*tw)-agg.V),unit:'명',std:'목표 '+Math.ceil(0.6*tw)+'명 (총 '+tw+'주 × 주당 0.6명)'},
+    {name:'1:1 원투원',cur:agg.M121+'건',pts:score.bd.otwone,max:10,need:Math.max(0,Math.ceil(2*tw)-agg.M121),unit:'건',std:'목표 '+Math.ceil(2*tw)+'건 (총 '+tw+'주 × 주당 2건)'},
+    {name:'감사장',cur:won(agg.N),pts:score.bd.tyfcb,max:15,need:agg.N>=100000000?0:null,std:'목표 1억 이상'},
+    {name:'교육점수',cur:agg.O+'점',pts:score.bd.train,max:10,need:Math.max(0,20-agg.O),unit:'점',std:'목표 20점'}
   ];
   var noteHtml = extra>0 ?
     '<div style="font-size:11.5px;color:var(--mut);margin-bottom:8px;line-height:1.6">🎯 모든 목표는 <b>이 기간에 실제 열린(열릴) 미팅 총 '+tw+'주</b> 기준으로 계산돼요. 출결 점수는 <b>앞으로 결석·지각이 없다는 전제</b>로, 지금까지 실제 기록만 반영해요.</div>' : '';
   $('actnote').innerHTML = noteHtml;
-  var html='<thead><tr><th>항목</th><th>현재 누적</th><th>더 필요</th><th>그린 기준</th></tr></thead><tbody>';
+  var html='<thead><tr><th>항목</th><th>현재 누적</th><th>현재 점수</th><th>더 필요</th><th>그린 기준</th></tr></thead><tbody>';
   rows.forEach(function(row){
     var nd = row.need===null?'<span class="cmut">—</span>':
       row.need===0?'<span class="cok">✓ 달성</span>':
       '<span class="cbad">+'+row.need+(row.unit||'')+'</span>';
-    html+='<tr><td class="albl">'+row.name+'</td><td class="ccur">'+row.cur+'</td><td>'+nd+'</td>'+
+    var ptsColor = row.pts>=row.max?'var(--g)':row.pts>0?'var(--a)':'var(--r)';
+    var ptsCell = '<span style="font-weight:800;color:'+ptsColor+'">'+row.pts+'</span><span style="color:var(--mut);font-size:10.5px">/'+row.max+'점</span>';
+    html+='<tr><td class="albl">'+row.name+'</td><td class="ccur">'+row.cur+'</td><td>'+ptsCell+'</td><td>'+nd+'</td>'+
       '<td class="cmut" style="font-family:inherit;font-size:11px">'+row.std+'</td></tr>';
   });
   $('atable').innerHTML=html+'</tbody>';
