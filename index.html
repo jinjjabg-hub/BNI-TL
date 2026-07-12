@@ -839,8 +839,8 @@ function computeChoices(agg, score, extra, target){
   var gap=Math.max(0,target-score.total);
   if(gap<=0) return {gap:0,choices:[],min:0,done:true};
   var ch=[];
-  if(score.bd.abs<15) ch.push({ico:'📅',lbl:'결석 없이 출석',txt:'앞으로 결석 없으면',sub:'+'+(15-score.bd.abs)+'점 회복',pts:15-score.bd.abs});
-  if(score.bd.time<10) ch.push({ico:'⏰',lbl:'정시 도착',txt:'앞으로 지각 없으면',sub:'+'+(10-score.bd.time)+'점 회복',pts:10-score.bd.time});
+  // 출결 감점은 앞으로 잘한다고 회복되지 않음 — 해당 월 +6개월 후 자동 소멸 (소멸 일정 박스에서 안내)
+  // 따라서 실제로 노력해서 얻을 수 있는 항목만 제시
   if(score.bd.ref<20){
     var nr=score.bd.ref===0?0.5:score.bd.ref===5?0.75:score.bd.ref===10?1.0:1.2;
     var needR=Math.max(0,Math.ceil(nr*totalW)-(agg.RGI+agg.RGO));
@@ -882,12 +882,41 @@ function renderFeedback(agg, score, extra, droppingKeys, targetMonthWeeks, targe
   var rPW=agg.totalWeeks>0?(agg.RGI+agg.RGO)/agg.totalWeeks:0;
   var vPW=agg.totalWeeks>0?agg.V/agg.totalWeeks:0;
   var oPW=agg.totalWeeks>0?agg.M121/agg.totalWeeks:0;
+
+  // ── 월별 출결 페널티 소멸 일정 (각 달 +6개월 후 윈도우에서 빠짐) ──
+  var recHtml='';
+  if(selName){
+    var recoveries=[];
+    agg.months.forEach(function(mk){
+      var md=MONTHLY[mk], mb=null;
+      for(var j=0;j<md.members.length;j++) if(md.members[j].name===selName){ mb=md.members[j]; break; }
+      if(!mb||(mb.A===0&&mb.L===0)) return;
+      var pp=parseKeyStr(mk); if(!pp) return;
+      var ry=pp.year, rm=pp.month+6;
+      if(rm>12){ ry++; rm-=12; }
+      var desc=[];
+      if(mb.A>0) desc.push('결석 '+mb.A+'회');
+      if(mb.L>0) desc.push('지각 '+mb.L+'회');
+      recoveries.push({fromLabel:pp.month+'월', recKey:toKey(ry,rm), recLabel:ry+'년 '+rm+'월', desc:desc.join(' · ')});
+    });
+    if(recoveries.length>0){
+      recoveries.sort(function(a,b){return a.recKey.localeCompare(b.recKey);});
+      var recRows='';
+      recoveries.forEach(function(rv){
+        recRows+='<div class="fb-row"><span class="fb-ico">📅</span>'+
+          '<span class="fb-txt"><b style="color:var(--r)">'+rv.fromLabel+'</b> '+rv.desc+
+          ' → <b style="color:var(--a)">'+rv.recLabel+'부터 계산 제외</b></span></div>';
+      });
+      recHtml='<div class="fb-box fb-amber"><div class="fb-title fta">📅 출결 감점 소멸 일정 (해당 월 +6개월)</div>'+recRows+'</div>';
+    }
+  }
+
   var fbCls=light==='Grey'?'grey':light==='Red'?'red':light==='Amber'?'amber':'green';
   var ftCls=light==='Grey'?'ftg':light==='Red'?'ftr':light==='Amber'?'fta':'ftg2';
   var dropLine=droppingKeys.length>0?'<div class="fb-row"><span class="fb-ico">⚠️</span><span class="fb-txt">빠지는 달('+droppingKeys.map(keyLabel).join(', ')+') 영향 반영</span></div>':'';
   var monthLine = targetMonthWeeks ?
     '<div class="fb-row"><span class="fb-ico">📅</span><span class="fb-txt"><b>'+targetMonthName+'에는 수요일이 총 '+targetMonthWeeks+'회</b> 있어요 — 출결에 문제없다는 전제로 아래 목표를 계산했어요</span></div>' : '';
-  var html='<div class="fb-box fb-'+fbCls+'"><div class="fb-title '+ftCls+'">💡 현재 활동 페이스</div>'+
+  var html=recHtml+'<div class="fb-box fb-'+fbCls+'"><div class="fb-title '+ftCls+'">💡 현재 활동 페이스</div>'+
     monthLine+
     '<div class="fb-row"><span class="fb-ico">📈</span><span class="fb-txt">주당 평균 — 리퍼럴 '+rPW.toFixed(2)+'건 / 비지터 '+vPW.toFixed(2)+'명 / 1:1 '+oPW.toFixed(2)+'건</span></div>'+
     (extra>0?'<div class="fb-row"><span class="fb-ico">⏰</span><span class="fb-txt">남은 <b>'+extra+'주</b> 기준 피드백이에요</span></div>':'')+
@@ -951,6 +980,26 @@ function buildFeedbackText(name, mode){
     lines.push('📅 '+m.targetMonthName+'에는 수요일이 총 '+m.targetMonthWeeks+'회 있어요 (출결 문제없다는 전제로 계산)');
   }
   lines.push('');
+  // 출결 감점 소멸 일정
+  var recLines=[];
+  agg.months.forEach(function(mk){
+    var md=MONTHLY[mk], mb=null;
+    for(var j=0;j<md.members.length;j++) if(md.members[j].name===name){ mb=md.members[j]; break; }
+    if(!mb||(mb.A===0&&mb.L===0)) return;
+    var pp=parseKeyStr(mk); if(!pp) return;
+    var ry=pp.year, rm=pp.month+6;
+    if(rm>12){ ry++; rm-=12; }
+    var desc=[];
+    if(mb.A>0) desc.push('결석 '+mb.A+'회');
+    if(mb.L>0) desc.push('지각 '+mb.L+'회');
+    recLines.push({k:toKey(ry,rm), txt:'· '+pp.month+'월 '+desc.join('/')+' → '+ry+'년 '+rm+'월부터 계산 제외'});
+  });
+  if(recLines.length>0){
+    recLines.sort(function(a,b){return a.k.localeCompare(b.k);});
+    lines.push('📅 출결 감점 소멸 일정 (해당 월 +6개월)');
+    recLines.forEach(function(r){ lines.push(r.txt); });
+    lines.push('');
+  }
   function pushTarget(label, target){
     var r=computeChoices(agg, score, extra, target);
     if(r.done || r.gap<=0) return;
