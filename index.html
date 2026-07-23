@@ -508,9 +508,13 @@ function syncFromSheet(){
       results.forEach(function(r){ if(r.md) monthly[toKey(r.md.year, r.md.month)] = r.md; });
       var keys = Object.keys(monthly).sort();
       if(!keys.length) throw new Error('시트에서 유효한 탭을 찾지 못했어요');
-      // 최신 달 기준 6개월 + 여유만 유지
+      // 최신 달 기준 6개월 + 여유만 유지 — 단, latest가 "진행중인 달"이면 "확정" 화면은
+      // 그보다 한 달 이른 달을 기준으로 6개월을 계산하므로, 자르는 기준도 그 확정 기준월에
+      // 맞춰야 한다. (여기서 latest만 기준으로 자르면 확정 화면이 필요로 하는 가장 오래된
+      // 달이 통째로 삭제돼서 "확정" 집계에서 한 달이 조용히 빠지는 문제가 있었음)
       var latest = keys[keys.length-1];
-      var start = rollingStart(latest);
+      var trimAnchor = (monthly[latest].remainWeeks>0 && keys.length>1) ? keys[keys.length-2] : latest;
+      var start = rollingStart(trimAnchor);
       keys.forEach(function(k){ if(k < start) delete monthly[k]; });
       // 진단: '이미 지난 달'인데 못 읽은 탭만 경고 (이번 달은 탭 없어도 정상 → 오탐 제외)
       var now = new Date(), thisKey = toKey(now.getFullYear(), now.getMonth()+1);
