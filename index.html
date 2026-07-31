@@ -613,14 +613,19 @@ function aggregate(name, startKey, endKey){
   }
   if(firstIdx<0) return R;
   var validKeys = allKeys.slice(firstIdx);
-  validKeys.forEach(function(k){
+  validKeys.forEach(function(k, vi){
     var md = MONTHLY[k], mb = null;
     for(var j=0;j<md.members.length;j++) if(md.members[j].name===name){ mb=md.members[j]; break; }
     if(!mb) return;
     R.P+=mb.P; R.A+=mb.A; R.L+=mb.L; R.M+=mb.M; R.S+=mb.S;
     R.RGI+=mb.RGI; R.RGO+=mb.RGO; R.V+=mb.V; R.M121+=mb.M121;
     R.N+=mb.N; R.O+=mb.O;
-    R.months.push(k); R.totalWeeks+=md.actualWeeks;
+    R.months.push(k);
+    // 이 사람이 이 롤링윈도우 안에서 "처음 등장한 달"은 중도가입 월일 수 있음 →
+    // 챕터 전체 주수(md.actualWeeks) 대신 본인 출결합계(가입 후 실제 있었던 주)를 사용
+    var isFirstAppearance = (vi===0);
+    var personalWeeks = mb.P+mb.A+mb.L+mb.M+mb.S;
+    R.totalWeeks += isFirstAppearance ? Math.min(personalWeeks, md.actualWeeks) : md.actualWeeks;
   });
   if(validKeys.length>0){
     var lmd = MONTHLY[validKeys[validKeys.length-1]];
