@@ -9,10 +9,10 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>BNI 트래픽 라이트</title>
-<meta property="og:title" content="BNI 트래픽 라이트">
+<meta property="og:title" content="BNI 트래픽 라이트 기준">
 <meta property="og:description" content="파이오니어 챕터 멤버 활동 점수 대시보드">
-<meta property="og:image" content="https://jinjjabg-hub.github.io/BNI-TL/og_image.png">
-<meta property="og:url" content="https://jinjjabg-hub.github.io/BNI-TL/">
+<meta property="og:image" content="https://jinjjabg-hub.github.io/BNI-TL-G/og_image.png">
+<meta property="og:url" content="https://jinjjabg-hub.github.io/BNI-TL-G/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <style>
@@ -251,11 +251,15 @@ var SHEET_ID = '1zmNQieMEX3IbovQHytoyuG3RztmGoGTImZlRkYnKKkc';
 var CHAPTER  = '파이오니어';
 var DOW      = 3;   // 미팅 요일: 0일 1월 2화 3수 4목 5금 6토
 var PROBE_BACK = 12; // 최신 탭을 찾기 위해 몇 달 전까지 탐색할지
+// 자이언츠로 쓰려면 위 3줄을 아래로 교체
+//   SHEET_ID='1e47MFI5StDcqW5QvATkGcbzvryTkXZyKfKD22nfr9Ok'; CHAPTER='자이언츠'; DOW=2;
+
+// ★ 연간 멤버십 비용 (TYFCB 점수의 나눗값) — 적용 시작월 내림차순
 // ══════════════════════════════════════════════════════════════
 
 var MONTHLY = {}, MONTHS = [], MEMBERS = [];
 var curFilter = 'all', selName = null, selMode = 'current';
-var CACHE_KEY = 'tl_cache_v1';
+var CACHE_KEY = 'tlkr_pioneer_v1';
 
 // ── 유틸 ──────────────────────────────────────────────────────
 function $(id){ return document.getElementById(id); }
@@ -318,7 +322,7 @@ function tableToRows(table){
 }
 var JUNK_NAMES = ['비지터','BNI','합','합계','계','총계','한글이름순','영어이름순'];
 // 표준 열 순서(모든 달 동일하게 써온 순서) — 헤더 텍스트 인식이 실패해도 이 순서로 강제 추출
-var STD_ORDER = ['name','P','A','L','M','S','RGI','RGO',null,null,'V','M121','N','O'];
+var STD_ORDER = ['name','P','A','L','M','S','RGI','RGO',null,null,'V','M121','N','O','SPO'];
 function looksLikeMemberRow(raw){
   if(!raw) return false;
   var kor = raw.split(/\s+/)[0].trim();
@@ -348,7 +352,7 @@ function positionalScan(rows){
       name:kor, full:raw,
       P:get('P'), A:get('A'), L:get('L'), M:get('M'), S:get('S'),
       RGI:get('RGI'), RGO:get('RGO'), V:get('V'), M121:get('M121'),
-      N:get('N'), O:get('O')
+      N:get('N'), O:get('O'), SPO:get('SPO')
     });
   }
   return members;
@@ -378,7 +382,8 @@ function parseMonthRows(rows, y, m){
       M: fi(['병가','M ']), S: fi(['대리','S ']),
       RGI: fi(['준 T1','준T1','RGI']), RGO: fi(['준 T2','준T2','RGO']),
       V: fi(['비지터','V ']), M121: fi(['1-2-1','121','원투원']),
-      N: fi(['감사장','Value of Business','Value']), O: fi(['CEU','교육','Training'])
+      N: fi(['감사장','Value of Business','Value','TYFCB']), O: fi(['CEU','교육','Training']),
+      SPO: fi(['스폰서','Sponsor','신규회원','후원'])
     };
     if(idx.name<0 || idx.P<0) throw new Error('컬럼 인식 실패');
     for(var r2=hi+1; r2<rows.length; r2++){
@@ -392,7 +397,8 @@ function parseMonthRows(rows, y, m){
         M:num(row[idx.M]), S:num(row[idx.S]),
         RGI:num(row[idx.RGI]), RGO:num(row[idx.RGO]),
         V:num(row[idx.V]), M121:num(row[idx.M121]),
-        N:num(row[idx.N]), O:num(row[idx.O])
+        N:num(row[idx.N]), O:num(row[idx.O]),
+        SPO: idx.SPO>=0 ? num(row[idx.SPO]) : 0
       });
     }
     if(!members.length) throw new Error('멤버 0명');
@@ -605,7 +611,7 @@ $('syncbtn').onclick = function(){
 
 // ── 집계 ──────────────────────────────────────────────────────
 function aggregate(name, startKey, endKey){
-  var R = {P:0,A:0,L:0,M:0,S:0,RGI:0,RGO:0,V:0,M121:0,N:0,O:0,totalWeeks:0,remainWeeks:0,months:[]};
+  var R = {P:0,A:0,L:0,M:0,S:0,RGI:0,RGO:0,V:0,M121:0,N:0,O:0,SPO:0,MT:0,totalWeeks:0,remainWeeks:0,months:[]};
   var allKeys = MONTHS.filter(function(k){return k>=startKey && k<=endKey;});
   var firstIdx = -1;
   for(var i=0;i<allKeys.length;i++){
@@ -613,23 +619,20 @@ function aggregate(name, startKey, endKey){
   }
   if(firstIdx<0) return R;
   var validKeys = allKeys.slice(firstIdx);
-  validKeys.forEach(function(k, vi){
+  validKeys.forEach(function(k){
     var md = MONTHLY[k], mb = null;
     for(var j=0;j<md.members.length;j++) if(md.members[j].name===name){ mb=md.members[j]; break; }
     if(!mb) return;
     R.P+=mb.P; R.A+=mb.A; R.L+=mb.L; R.M+=mb.M; R.S+=mb.S;
     R.RGI+=mb.RGI; R.RGO+=mb.RGO; R.V+=mb.V; R.M121+=mb.M121;
-    R.N+=mb.N; R.O+=mb.O;
-    R.months.push(k);
-    // 이 사람이 이 롤링윈도우 안에서 "처음 등장한 달"은 중도가입 월일 수 있음 →
-    // 챕터 전체 주수(md.actualWeeks) 대신 본인 출결합계(가입 후 실제 있었던 주)를 사용
-    var isFirstAppearance = (vi===0);
-    var personalWeeks = mb.P+mb.A+mb.L+mb.M+mb.S;
-    R.totalWeeks += isFirstAppearance ? Math.min(personalWeeks, md.actualWeeks) : md.actualWeeks;
+    R.N+=mb.N; R.O+=mb.O; R.SPO+=(mb.SPO||0);
+    R.MT+=(mb.P+mb.A+mb.L+mb.M+mb.S);   // (참고용, 한국 기준은 실제로 totalWeeks를 분모로 사용)
+    R.months.push(k); R.totalWeeks+=md.actualWeeks;
   });
   if(validKeys.length>0){
     var lmd = MONTHLY[validKeys[validKeys.length-1]];
     R.remainWeeks = Math.max(0, lmd.fullWeeks - lmd.actualWeeks);
+    R.endKey = validKeys[validKeys.length-1];
   }
   return R;
 }
@@ -647,28 +650,34 @@ function getConfirmedAgg(name){
   return aggregate(name, rollingStart(ck), ck);
 }
 
-// ── 점수 계산 (기존 공식 동일) ─────────────────────────────────
-function calcScore(agg, extra){
+// ── 점수 계산 (한국 표준 · 6개월 롤링) ───────────────────────
+// 분모 = 6개월간 챕터 실제 진행 주수(totalWeeks + 예상 주). 지각 3회 = 결석 1회로 환산.
+function calcScore(agg, extra, monthKey){
   extra = extra||0;
-  var tot = agg.totalWeeks + extra;
-  if(tot===0) return {total:0, bd:{abs:0,time:0,ref:0,vis:0,otwone:0,tyfcb:0,train:0}, rates:{rW:0,vW:0,oW:0}};
-  var ref = agg.RGI + agg.RGO;
-  var rW = ref/tot, vW = agg.V/tot, oW = agg.M121/tot;
-  var abs   = agg.A>2 ? 0 : agg.A===2 ? 5 : agg.A===1 ? 10 : 15;
-  var time  = agg.L>=2 ? 0 : agg.L===1 ? 5 : 10;
-  var refPt = rW<0.5?0 : rW<0.75?5 : rW<1?10 : rW<1.2?15 : 20;
+  var W = agg.totalWeeks + extra;
+  if(W===0 || agg.totalWeeks===0) return {total:0, bd:{abs:0,time:0,ref:0,vis:0,otwone:0,tyfcb:0,train:0},
+                     rates:{rW:0,vW:0,oW:0}, MT:0};
+  var effAbsent = agg.A + Math.floor(agg.L/3);
+  var remLate = agg.L % 3;
+  var absPt  = Math.max(0, 15 - effAbsent*5);
+  var timePt = Math.max(0, 10 - remLate*5);
+  var rW = (agg.RGI+agg.RGO)/W;
+  var refPt = rW<0.5?0 : rW<0.75?5 : rW<1.0?10 : rW<1.2?15 : 20;
+  var vW = agg.V/W;
   var visPt = vW<0.1?0 : vW<0.2?5 : vW<0.4?10 : vW<0.6?15 : 20;
-  var oPt   = oW<1?0 : oW<2?5 : 10;
-  var tyfcb = agg.N<25000000?0 : agg.N<50000000?5 : agg.N<100000000?10 : 15;
-  var trPt  = agg.O<10?0 : agg.O<20?5 : 10;
+  var oW = agg.M121/W;
+  var oPt = oW<1?0 : oW<2?5 : 10;
+  var tyPt = agg.N<25000000?0 : agg.N<50000000?5 : agg.N<100000000?10 : 15;
+  var trPt = agg.O<10?0 : agg.O<20?5 : 10;
   return {
-    total: abs+time+refPt+visPt+oPt+tyfcb+trPt,
-    bd: {abs:abs,time:time,ref:refPt,vis:visPt,otwone:oPt,tyfcb:tyfcb,train:trPt},
-    rates: {rW:rW,vW:vW,oW:oW}
+    total: absPt+timePt+refPt+visPt+oPt+tyPt+trPt,
+    bd: {abs:absPt, time:timePt, ref:refPt, vis:visPt, otwone:oPt, tyfcb:tyPt, train:trPt},
+    rates: {rW:rW, vW:vW, oW:oW},
+    MT: W   // 필드명은 호환용으로 유지 — 실제 값은 "6개월 총 주수"
   };
 }
 
-// ── 데이터바 ──────────────────────────────────────────────────
+// ── 데이터바// ── 데이터바 ──────────────────────────────────────────────────
 function updateDbar(){
   var last = MONTHS[MONTHS.length-1];
   var dns = ['일','월','화','수','목','금','토'];
@@ -687,7 +696,8 @@ function updateDbar(){
 // ── 전체 현황 ─────────────────────────────────────────────────
 function renderStats(){
   var counts={Green:0,Amber:0,Red:0,Grey:0};
-  MEMBERS.forEach(function(n){ counts[getLight(calcScore(getConfirmedAgg(n),0).total)]++; });
+  var _ck=getConfirmedKey();
+  MEMBERS.forEach(function(n){ counts[getLight(calcScore(getConfirmedAgg(n),0,_ck).total)]++; });
   $('ttitle').textContent = CHAPTER+' 전체 현황 — '+getConfirmedKey()+' 확정 기준';
   $('srow').innerHTML =
     '<div class="sc" data-f="Green"><div class="sc-lbl">🟢 그린</div><div class="sc-val vg">'+counts.Green+'</div></div>'+
@@ -705,23 +715,28 @@ function renderStats(){
 }
 function renderTable(){
   var tb=$('tbody'); tb.innerHTML='';
+  var ck=getConfirmedKey();
   MEMBERS.forEach(function(name){
-    var agg=getConfirmedAgg(name), s=calcScore(agg,0), light=getLight(s.total);
+    var agg=getConfirmedAgg(name), s=calcScore(agg,0,ck), light=getLight(s.total);
     if(curFilter!=='all' && light!==curFilter) return;
-    var color=lcolor(light), absScore=s.bd.abs+s.bd.time;
+    var color=lcolor(light), absTime=s.bd.abs+s.bd.time;
     function gc(v,max){ return v>=max?'var(--g)':v>0?'var(--a)':'var(--r)'; }
+    function cell(sub,pt,max){
+      return '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+sub+'</div>'+
+             '<div style="font-weight:700;color:'+gc(pt,max)+'">'+pt+'점</div></td>';
+    }
     var tr=document.createElement('tr');
     tr.innerHTML =
       '<td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>'+name+'</strong>'+
       '<span style="font-weight:900;font-size:13px;color:'+color+'">'+s.total+'</span>'+
       '<span class="badge '+light+'" style="font-size:10px;padding:1px 6px">'+lkor(light)+'</span></div></td>'+
       '<td style="text-align:center;font-size:11px;color:var(--mut)">'+agg.totalWeeks+'주</td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">결'+agg.A+'/지'+agg.L+'</div><div style="font-weight:700;color:'+gc(absScore,25)+'">'+absScore+'점</div></td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+(agg.RGI+agg.RGO)+'건</div><div style="font-weight:700;color:'+gc(s.bd.ref,20)+'">'+s.bd.ref+'점</div></td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.V+'명</div><div style="font-weight:700;color:'+gc(s.bd.vis,20)+'">'+s.bd.vis+'점</div></td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.M121+'건</div><div style="font-weight:700;color:'+gc(s.bd.otwone,10)+'">'+s.bd.otwone+'점</div></td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+(agg.N>0?agg.N.toLocaleString('ko-KR'):'0')+'</div><div style="font-weight:700;color:'+gc(s.bd.tyfcb,15)+'">'+s.bd.tyfcb+'점</div></td>'+
-      '<td style="text-align:center"><div style="font-size:10px;color:var(--mut)">'+agg.O+'점</div><div style="font-weight:700;color:'+gc(s.bd.train,10)+'">'+s.bd.train+'점</div></td>';
+      cell('결'+agg.A+'/지'+agg.L, absTime, 25)+
+      cell((agg.RGI+agg.RGO)+'건', s.bd.ref, 20)+
+      cell(agg.V+'명', s.bd.vis, 20)+
+      cell(agg.M121+'건', s.bd.otwone, 10)+
+      cell((agg.N/10000).toFixed(0)+'만', s.bd.tyfcb, 15)+
+      cell(agg.O, s.bd.train, 10);
     tr.addEventListener('click', function(){ goPersonal(name); });
     tb.appendChild(tr);
   });
@@ -783,17 +798,22 @@ function modeAgg(name, mode){
   var ck=getConfirmedKey(), ok=getOngoingKey();
   var mns=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   var agg, extra=0, rangeLabel='', droppingKeys=[], modeLbl='', targetMonthWeeks=0, targetMonthName='';
+  var kind='future', doneWeeksThisMonth=0;
   if(mode==='current'){
     agg=aggregate(name, rollingStart(ck), ck);
     rangeLabel=rollingStart(ck)+' ~ '+ck+' 확정 ('+agg.totalWeeks+'주)';
     modeLbl=mns[parseKeyStr(ck).month]+' 확정';
-    targetMonthWeeks=MONTHLY[ck].fullWeeks; targetMonthName=mns[parseKeyStr(ck).month];
+    kind='confirmed';
+    targetMonthWeeks=MONTHLY[ck].actualWeeks; targetMonthName=mns[parseKeyStr(ck).month];
+    doneWeeksThisMonth=MONTHLY[ck].actualWeeks;
   } else if(ok && mode===ok){
     agg=aggregate(name, rollingStart(ok), ok);
     extra=agg.remainWeeks;
     rangeLabel=rollingStart(ok)+' ~ '+ok+' 진행중 ('+agg.totalWeeks+'주 + 남은 '+agg.remainWeeks+'주)';
     modeLbl=mns[parseKeyStr(ok).month]+' 예상';
+    kind='ongoing';
     targetMonthWeeks=MONTHLY[ok].fullWeeks; targetMonthName=mns[parseKeyStr(ok).month];
+    doneWeeksThisMonth=MONTHLY[ok].actualWeeks;
   } else {
     var predEnd=mode, predStart=rollingStart(predEnd), curStart=rollingStart(last);
     var realStart = predStart>(MONTHS[0]||'') ? predStart : (MONTHS[0]||predStart);
@@ -812,14 +832,16 @@ function modeAgg(name, mode){
     modeLbl=mns[pe.month]+' 예상';
     targetMonthWeeks=countDOW(pe.year, pe.month, DOW); targetMonthName=mns[pe.month];
   }
+  var targetKey = (mode==='current') ? ck : (ok && mode===ok) ? ok : mode;
   return {agg:agg, extra:extra, rangeLabel:rangeLabel, droppingKeys:droppingKeys, modeLbl:modeLbl,
-    targetMonthWeeks:targetMonthWeeks, targetMonthName:targetMonthName};
+    targetMonthWeeks:targetMonthWeeks, targetMonthName:targetMonthName, targetKey:targetKey,
+    kind:kind, doneWeeksThisMonth:doneWeeksThisMonth};
 }
 function updatePersonal(){
   if(!selName) return;
   var m = modeAgg(selName, selMode);
   var agg=m.agg, extra=m.extra;
-  var score=calcScore(agg,extra), light=getLight(score.total), color=lcolor(light);
+  var score=calcScore(agg,extra,m.targetKey), light=getLight(score.total), color=lcolor(light);
 
   var dropHtml = m.droppingKeys.length>0 ?
     '<div style="font-size:11px;color:var(--a);margin-top:3px">⚠️ 빠지는 달: '+m.droppingKeys.map(keyLabel).join(', ')+'</div>' : '';
@@ -834,108 +856,108 @@ function updatePersonal(){
     '<div><div class="pbig" style="color:'+color+'">'+score.total+'</div>'+
     '<div class="pbig-sub">/ 100점</div>'+gapHtml+'</div></div>';
 
-  var naScore=calcScore(agg,0).total, naLight=getLight(naScore);
+  var naScore=calcScore(agg,0,m.targetKey).total, naLight=getLight(naScore);
   $('nacard').innerHTML =
     '<div class="na-lbl">📊 지금까지 실적만으로 마감하면</div>'+
     '<span class="na-score" style="color:'+lcolor(naLight)+'">'+naScore+'점</span>'+
     '<span class="badge '+naLight+'">'+lkor(naLight)+'</span>'+
     '<span style="font-size:11px;color:var(--mut)">'+(extra>0?'남은 '+extra+'주 동안 더 해야 해요':'현재 확정 점수')+'</span>';
 
-  renderActTable(agg, score, extra);
-  renderFeedback(agg, score, extra, m.droppingKeys, m.targetMonthWeeks, m.targetMonthName);
+  renderActTable(agg, score, extra, m);
+  renderFeedback(agg, score, extra, m.droppingKeys, m.targetMonthWeeks, m.targetMonthName, m.kind, m.doneWeeksThisMonth);
 }
 
 // ── 부족분 역산 ───────────────────────────────────────────────
 function computeChoices(agg, score, extra, target){
-  var totalW=agg.totalWeeks+extra;
-  var rPW=agg.totalWeeks>0?(agg.RGI+agg.RGO)/agg.totalWeeks:0;
-  var vPW=agg.totalWeeks>0?agg.V/agg.totalWeeks:0;
-  var oPW=agg.totalWeeks>0?agg.M121/agg.totalWeeks:0;
-  var gap=Math.max(0,target-score.total);
+  var W=score.MT, gap=Math.max(0,target-score.total);
   if(gap<=0) return {gap:0,choices:[],min:0,done:true};
   var ch=[];
-  // 출결 감점은 앞으로 잘한다고 회복되지 않음 — 해당 월 +6개월 후 자동 소멸 (소멸 일정 박스에서 안내)
-  // 따라서 실제로 노력해서 얻을 수 있는 항목만 제시
+  function nextStep(steps, curVal, perWeek){
+    for(var i=0;i<steps.length;i++){
+      var t = perWeek ? steps[i].r*W : steps[i].r;
+      if(t > curVal) return {need:Math.ceil(t)-curVal, pt:steps[i].p - (steps[i-1]?steps[i-1].p:0), to:steps[i].p};
+    }
+    return null;
+  }
+  // 리퍼럴 20
   if(score.bd.ref<20){
-    var nr=score.bd.ref===0?0.5:score.bd.ref===5?0.75:score.bd.ref===10?1.0:1.2;
-    var needR=Math.max(0,Math.ceil(nr*totalW)-(agg.RGI+agg.RGO));
-    if(needR>0){
-      var pw=extra>0?(needR/extra).toFixed(1):'-';
-      ch.push({ico:'🤝',lbl:'리퍼럴',txt:needR+'건 추가 → +5점',sub:extra>0?'남은 '+extra+'주 주당 '+pw+'건':'현재 주당 '+rPW.toFixed(2)+'건',pts:5});
-    }
+    var r=nextStep([{r:0.5,p:5},{r:0.75,p:10},{r:1.0,p:15},{r:1.2,p:20}], agg.RGI+agg.RGO, true);
+    if(r) ch.push({ico:'🤝',lbl:'리퍼럴',txt:r.need+'건 추가 → '+r.to+'점',
+      sub:extra>0?'남은 '+extra+'주 동안 (주당 약 '+(r.need/extra).toFixed(1)+'건씩)':'현재 주당 '+((agg.RGI+agg.RGO)/W).toFixed(2)+'건',pts:r.pt});
   }
+  // 비지터 20
   if(score.bd.vis<20){
-    var steps=[0.1,0.2,0.4,0.6], nv=0.6;
-    for(var i=0;i<steps.length;i++){ if(Math.ceil(steps[i]*totalW)>agg.V){nv=steps[i];break;} }
-    var needV=Math.max(0,Math.ceil(nv*totalW)-agg.V);
-    if(needV>0) ch.push({ico:'👥',lbl:'비지터',txt:needV+'명 초대 → +5점',sub:'현재 주당 '+vPW.toFixed(2)+'명',pts:5});
+    var v=nextStep([{r:0.1,p:5},{r:0.2,p:10},{r:0.4,p:15},{r:0.6,p:20}], agg.V, true);
+    if(v) ch.push({ico:'👥',lbl:'비지터',txt:v.need+'명 초대 → '+v.to+'점',
+      sub:extra>0?'남은 '+extra+'주 동안 (주당 약 '+(v.need/extra).toFixed(1)+'명씩)':'현재 주당 '+(agg.V/W).toFixed(2)+'명',pts:v.pt});
   }
+  // 원투원 10
   if(score.bd.otwone<10){
-    var no=score.bd.otwone===0?1:2;
-    var needO=Math.max(0,Math.ceil(no*totalW)-agg.M121);
-    if(needO>0){
-      var pw2=extra>0?(needO/extra).toFixed(1):'-';
-      ch.push({ico:'☕',lbl:'1:1',txt:needO+'건 더 → +5점',sub:extra>0?'남은 '+extra+'주 주당 '+pw2+'건':'현재 주당 '+oPW.toFixed(2)+'건',pts:5});
-    }
+    var o=nextStep([{r:1,p:5},{r:2,p:10}], agg.M121, true);
+    if(o) ch.push({ico:'☕',lbl:'1:1',txt:o.need+'건 더 → '+o.to+'점',
+      sub:extra>0?'남은 '+extra+'주 동안 (주당 약 '+(o.need/extra).toFixed(1)+'건씩)':'현재 주당 '+(agg.M121/W).toFixed(2)+'건',pts:o.pt});
   }
+  // 감사장 15 (금액 절대값 — 주수 무관)
   if(score.bd.tyfcb<15){
-    var nt=score.bd.tyfcb===0?25000000:score.bd.tyfcb===5?50000000:100000000;
-    var needN=Math.max(0,nt-agg.N);
-    if(needN>0) ch.push({ico:'💰',lbl:'감사장',txt:needN.toLocaleString('ko-KR')+'원 더 → +5점',sub:'목표 '+nt.toLocaleString('ko-KR')+'원',pts:5});
+    var t=nextStep([{r:25000000,p:5},{r:50000000,p:10},{r:100000000,p:15}], agg.N, false);
+    if(t) ch.push({ico:'💰',lbl:'감사장',txt:Math.round(t.need).toLocaleString('ko-KR')+'원 더 → '+t.to+'점',
+      sub:'현재 '+Math.round(agg.N).toLocaleString('ko-KR')+'원',pts:t.pt});
   }
+  // 교육 10 (누적 점수)
   if(score.bd.train<10){
-    var needE=score.bd.train===0?Math.max(0,10-agg.O):Math.max(0,20-agg.O);
-    if(needE>0) ch.push({ico:'📚',lbl:'교육점수',txt:needE+'점 추가 → +5점',sub:'포럼·팟캐스트',pts:5});
+    var needTr = score.bd.train===0 ? Math.max(1,10-agg.O) : Math.max(1,20-agg.O);
+    ch.push({ico:'📚',lbl:'교육',txt:needTr+'점 추가 → '+(score.bd.train===0?5:10)+'점',sub:'포럼·팟캐스트·세미나',pts:5});
   }
   var sorted=ch.slice().sort(function(a,b){return b.pts-a.pts;});
   var cum=0,mn=0;
   for(var j=0;j<sorted.length;j++){ cum+=sorted[j].pts; mn++; if(cum>=gap) break; }
   return {gap:gap,choices:ch,min:mn,done:false};
 }
-function renderFeedback(agg, score, extra, droppingKeys, targetMonthWeeks, targetMonthName){
-  var light=getLight(score.total);
-  var rPW=agg.totalWeeks>0?(agg.RGI+agg.RGO)/agg.totalWeeks:0;
-  var vPW=agg.totalWeeks>0?agg.V/agg.totalWeeks:0;
-  var oPW=agg.totalWeeks>0?agg.M121/agg.totalWeeks:0;
+function renderFeedback(agg, score, extra, droppingKeys, targetMonthWeeks, targetMonthName, kind, doneWeeksThisMonth){
+  var light=getLight(score.total), W=score.MT;
 
-  // ── 월별 출결 페널티 소멸 일정 (각 달 +6개월 후 윈도우에서 빠짐) ──
+  // 출결 감점 소멸 일정 (지각 3회=결석 1회 환산, 해당 월 +6개월 후 자동 제외)
   var recHtml='';
   if(selName){
-    var recoveries=[];
+    var recs=[];
     agg.months.forEach(function(mk){
       var md=MONTHLY[mk], mb=null;
       for(var j=0;j<md.members.length;j++) if(md.members[j].name===selName){ mb=md.members[j]; break; }
-      if(!mb||(mb.A===0&&mb.L===0)) return;
+      if(!mb || (mb.A===0 && mb.L===0)) return;
       var pp=parseKeyStr(mk); if(!pp) return;
-      var ry=pp.year, rm=pp.month+6;
-      if(rm>12){ ry++; rm-=12; }
-      var desc=[];
-      if(mb.A>0) desc.push('결석 '+mb.A+'회');
-      if(mb.L>0) desc.push('지각 '+mb.L+'회');
-      recoveries.push({fromLabel:pp.month+'월', recKey:toKey(ry,rm), recLabel:ry+'년 '+rm+'월', desc:desc.join(' · ')});
+      var ry=pp.year, rm=pp.month+6; if(rm>12){ ry++; rm-=12; }
+      var desc=[]; if(mb.A>0) desc.push('결석 '+mb.A+'회'); if(mb.L>0) desc.push('지각 '+mb.L+'회');
+      recs.push({k:toKey(ry,rm), from:pp.month+'월', desc:desc.join(' · '), to:ry+'년 '+rm+'월'});
     });
-    if(recoveries.length>0){
-      recoveries.sort(function(a,b){return a.recKey.localeCompare(b.recKey);});
-      var recRows='';
-      recoveries.forEach(function(rv){
-        recRows+='<div class="fb-row"><span class="fb-ico">📅</span>'+
-          '<span class="fb-txt"><b style="color:var(--r)">'+rv.fromLabel+'</b> '+rv.desc+
-          ' → <b style="color:var(--a)">'+rv.recLabel+'부터 계산 제외</b></span></div>';
+    if(recs.length){
+      recs.sort(function(a,b){return a.k.localeCompare(b.k);});
+      var rr='';
+      recs.forEach(function(v){
+        rr+='<div class="fb-row"><span class="fb-ico">📅</span><span class="fb-txt">'+
+            '<b style="color:var(--r)">'+v.from+'</b> '+v.desc+' → <b style="color:var(--a)">'+v.to+'부터 계산 제외</b></span></div>';
       });
-      recHtml='<div class="fb-box fb-amber"><div class="fb-title fta">📅 출결 감점 소멸 일정 (해당 월 +6개월)</div>'+recRows+'</div>';
+      recHtml='<div class="fb-box fb-amber"><div class="fb-title fta">📅 출결 감점 소멸 일정 (해당 월 +6개월)</div>'+rr+'</div>';
     }
   }
 
   var fbCls=light==='Grey'?'grey':light==='Red'?'red':light==='Amber'?'amber':'green';
   var ftCls=light==='Grey'?'ftg':light==='Red'?'ftr':light==='Amber'?'fta':'ftg2';
   var dropLine=droppingKeys.length>0?'<div class="fb-row"><span class="fb-ico">⚠️</span><span class="fb-txt">빠지는 달('+droppingKeys.map(keyLabel).join(', ')+') 영향 반영</span></div>':'';
-  var monthLine = targetMonthWeeks ?
-    '<div class="fb-row"><span class="fb-ico">📅</span><span class="fb-txt"><b>'+targetMonthName+'에는 수요일이 총 '+targetMonthWeeks+'회</b> 있어요 — 출결에 문제없다는 전제로 아래 목표를 계산했어요</span></div>' : '';
-  var html=recHtml+'<div class="fb-box fb-'+fbCls+'"><div class="fb-title '+ftCls+'">💡 현재 활동 페이스</div>'+
+  var monthLine = '';
+  if(kind==='confirmed' && targetMonthWeeks){
+    monthLine = '<div class="fb-row"><span class="fb-ico">✅</span><span class="fb-txt"><b>'+targetMonthName+' 미팅 '+targetMonthWeeks+'회</b> 모두 반영된 확정 점수예요</span></div>';
+  } else if(kind==='ongoing' && targetMonthWeeks){
+    monthLine = '<div class="fb-row"><span class="fb-ico">🗓️</span><span class="fb-txt"><b>'+targetMonthName+'은 '+doneWeeksThisMonth+'회차까지 이미 반영</b>됐고, 남은 <b>'+extra+'회</b>는 전부 출석한다고 가정하고 계산했어요 (이번 달 총 '+targetMonthWeeks+'회 중)</span></div>';
+  } else if(kind==='future' && targetMonthWeeks){
+    monthLine = '<div class="fb-row"><span class="fb-ico">🗓️</span><span class="fb-txt"><b>'+targetMonthName+' 미팅은 총 '+targetMonthWeeks+'회</b> 있을 예정이에요 — 전부 출석 전제로 계산했어요</span></div>';
+  }
+  var html = recHtml +
+    '<div class="fb-box fb-'+fbCls+'"><div class="fb-title '+ftCls+'">💡 현재 활동 페이스 (한국 기준)</div>'+
     monthLine+
-    '<div class="fb-row"><span class="fb-ico">📈</span><span class="fb-txt">주당 평균 — 리퍼럴 '+rPW.toFixed(2)+'건 / 비지터 '+vPW.toFixed(2)+'명 / 1:1 '+oPW.toFixed(2)+'건</span></div>'+
-    (extra>0?'<div class="fb-row"><span class="fb-ico">⏰</span><span class="fb-txt">남은 <b>'+extra+'주</b> 기준 피드백이에요</span></div>':'')+
+    '<div class="fb-row"><span class="fb-ico">📈</span><span class="fb-txt">주당 평균 — 리퍼럴 '+((agg.RGI+agg.RGO)/W).toFixed(2)+'건 · 비지터 '+(agg.V/W).toFixed(2)+'명 · 1:1 '+(agg.M121/W).toFixed(2)+'건</span></div>'+
+    (extra>0?'<div class="fb-row"><span class="fb-ico">⏰</span><span class="fb-txt">남은 <b>'+extra+'주</b> 반영한 예상이에요</span></div>':'')+
     dropLine+'</div>';
+
   function makeFb(cls,ftc,emoji,title,target){
     var r=computeChoices(agg,score,extra,target);
     if(r.done) return '<div class="fb-box fb-'+cls+'"><div class="fb-title '+ftc+'">'+emoji+' '+title+' ✅ 달성!</div>'+
@@ -955,65 +977,82 @@ function renderFeedback(agg, score, extra, droppingKeys, targetMonthWeeks, targe
   else { html+=makeFb('green','ftg2','🏆','그린 유지!',71); }
   $('fbwrap').innerHTML=html;
 }
-function renderActTable(agg, score, extra){
-  var tw=agg.totalWeeks+extra;
+function renderActTable(agg, score, extra, m){
+  var W=score.MT;
+  var ref=agg.RGI+agg.RGO;
+  function need(cur,tgt){ return Math.max(0, Math.ceil(tgt)-cur); }
+  function won(v){ return Math.round(v).toLocaleString('ko-KR')+'원'; }
+  var effAbsent=agg.A+Math.floor(agg.L/3), remLate=agg.L%3;
   var rows=[
-    {name:'출석/결석',cur:'출석 '+agg.P+'회 / 결석 '+agg.A+'회 <span style="color:var(--mut);font-weight:400">(병가 '+agg.M+'·대리 '+agg.S+')</span>',pts:score.bd.abs,max:15,need:null,std:'결석 0회 유지 시 15점 (총 '+tw+'주 기준)'},
-    {name:'지각',cur:agg.L+'회',pts:score.bd.time,max:10,need:null,std:'지각 0회 유지 시 10점 (총 '+tw+'주 기준)'},
-    {name:'리퍼럴(T1+T2)',cur:(agg.RGI+agg.RGO)+'건',pts:score.bd.ref,max:20,need:Math.max(0,Math.ceil(1.2*tw)-(agg.RGI+agg.RGO)),unit:'건',std:'목표 '+Math.ceil(1.2*tw)+'건 (총 '+tw+'주 × 주당 1.2건)'},
-    {name:'비지터',cur:agg.V+'명',pts:score.bd.vis,max:20,need:Math.max(0,Math.ceil(0.6*tw)-agg.V),unit:'명',std:'목표 '+Math.ceil(0.6*tw)+'명 (총 '+tw+'주 × 주당 0.6명)'},
-    {name:'1:1 원투원',cur:agg.M121+'건',pts:score.bd.otwone,max:10,need:Math.max(0,Math.ceil(2*tw)-agg.M121),unit:'건',std:'목표 '+Math.ceil(2*tw)+'건 (총 '+tw+'주 × 주당 2건)'},
-    {name:'감사장',cur:won(agg.N),pts:score.bd.tyfcb,max:15,need:agg.N>=100000000?0:null,std:'목표 1억 이상'},
-    {name:'교육점수',cur:agg.O+'점',pts:score.bd.train,max:10,need:Math.max(0,20-agg.O),unit:'점',std:'목표 20점'}
+    {n:'출석', cur:'결석 '+agg.A+'회'+(agg.L>=3?' (지각 '+agg.L+'회 중 '+Math.floor(agg.L/3)+'회 결석 환산)':''), pts:score.bd.abs, max:15,
+     nd:null, std:'결석 0회=15점 / 1회=10 / 2회=5 / 3회+=0'},
+    {n:'정시(지각)', cur:remLate+'회'+(agg.L>=3?' (환산 후 잔여)':''), pts:score.bd.time, max:10,
+     nd:null, std:'지각 0회=10점 / 1회=5 / 2회+=0 · 지각 3회=결석 1회로 환산'},
+    {n:'리퍼럴 (T1+T2)', cur:ref+'건', pts:score.bd.ref, max:20,
+     nd:need(ref,1.2*W), u:'건', std:'만점 '+Math.ceil(1.2*W)+'건 = '+W+'주 × 주당 1.2'},
+    {n:'비지터', cur:agg.V+'명', pts:score.bd.vis, max:20,
+     nd:need(agg.V,0.6*W), u:'명', std:'만점 '+Math.ceil(0.6*W)+'명 = '+W+'주 × 주당 0.6'},
+    {n:'1:1 원투원', cur:agg.M121+'건', pts:score.bd.otwone, max:10,
+     nd:need(agg.M121,2*W), u:'건', std:'만점 '+Math.ceil(2*W)+'건 = '+W+'주 × 주당 2'},
+    {n:'감사장', cur:won(agg.N), pts:score.bd.tyfcb, max:15,
+     nd:agg.N>=100000000?0:null, std:'1억 이상=15점 / 5천만↑=10 / 2500만↑=5'},
+    {n:'교육점수', cur:agg.O+'점', pts:score.bd.train, max:10,
+     nd:need(agg.O,20), u:'점', std:'누적 20↑=10점 / 10↑=5'}
   ];
-  var noteHtml = extra>0 ?
-    '<div style="font-size:11.5px;color:var(--mut);margin-bottom:8px;line-height:1.6">🎯 모든 목표는 <b>이 기간에 실제 열린(열릴) 미팅 총 '+tw+'주</b> 기준으로 계산돼요. 출결 점수는 <b>앞으로 결석·지각이 없다는 전제</b>로, 지금까지 실제 기록만 반영해요.</div>' : '';
-  $('actnote').innerHTML = noteHtml;
-  var html='<thead><tr><th>항목</th><th>현재 누적</th><th>현재 점수</th><th>더 필요</th><th>그린 기준</th></tr></thead><tbody>';
-  rows.forEach(function(row){
-    var nd = row.need===null?'<span class="cmut">—</span>':
-      row.need===0?'<span class="cok">✓ 달성</span>':
-      '<span class="cbad">+'+row.need+(row.unit||'')+'</span>';
-    var ptsColor = row.pts>=row.max?'var(--g)':row.pts>0?'var(--a)':'var(--r)';
-    var ptsCell = '<span style="font-weight:800;color:'+ptsColor+'">'+row.pts+'</span><span style="color:var(--mut);font-size:10.5px">/'+row.max+'점</span>';
-    html+='<tr><td class="albl">'+row.name+'</td><td class="ccur">'+row.cur+'</td><td>'+ptsCell+'</td><td>'+nd+'</td>'+
-      '<td class="cmut" style="font-family:inherit;font-size:11px">'+row.std+'</td></tr>';
+  var ongoingNote = (m && m.kind==='ongoing') ?
+    ' <b>'+m.targetMonthName+'은 '+m.doneWeeksThisMonth+'주차까지 실제 반영</b>, 남은 '+extra+'주는 출석 가정.' :
+    (extra>0?' (남은 '+extra+'주 출석 가정 포함)':'');
+  $('actnote').innerHTML = '<div style="font-size:11.5px;color:var(--mut);margin-bottom:8px;line-height:1.6">'+
+    '🇰🇷 <b>한국 표준 기준</b>이에요. 분모는 <b>6개월간 실제 진행 주수 '+W+'주</b>'+
+    ongoingNote+'예요.</div>';
+  var html='<thead><tr><th>항목</th><th>현재 누적</th><th>현재 점수</th><th>만점까지</th><th>만점 기준</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    var ndTxt = r.nd===null ? '<span class="cmut">—</span>'
+      : r.nd===0 ? '<span class="cok">✓ 만점</span>'
+      : '<span class="cbad">+'+r.nd+(r.u||'')+'</span>';
+    var col = r.pts>=r.max?'var(--g)':r.pts>0?'var(--a)':'var(--r)';
+    html+='<tr><td class="albl">'+r.n+'</td><td class="ccur">'+r.cur+'</td>'+
+      '<td><span style="font-weight:800;color:'+col+'">'+r.pts+'</span>'+
+      '<span style="color:var(--mut);font-size:10.5px">/'+r.max+'점</span></td>'+
+      '<td>'+ndTxt+'</td><td class="cmut" style="font-family:inherit;font-size:11px">'+r.std+'</td></tr>';
   });
   $('atable').innerHTML=html+'</tbody>';
 }
 
-// ── 카톡 피드백 복사 ──────────────────────────────────────────
+// ── 카톡 피드백 복사// ── 카톡 피드백 복사 ──────────────────────────────────────────
 function buildFeedbackText(name, mode){
   var m=modeAgg(name, mode);
   var agg=m.agg, extra=m.extra;
-  var score=calcScore(agg,extra), light=getLight(score.total);
+  var score=calcScore(agg,extra,m.targetKey), light=getLight(score.total);
   var lines=[];
   var korName = name.replace(/[a-zA-Z,\-\.\s]+/g,'').trim() || name.split(' ')[0];
   lines.push('안녕하세요 '+korName+' 대표님');
-  lines.push('트래픽 라이트 피드백 ('+m.modeLbl+')');
+  lines.push('트래픽 라이트 피드백 · 한국 기준 ('+m.modeLbl+')');
   lines.push('');
-  lines.push(lkor(light)+' '+score.total+'점');
-  if(m.targetMonthWeeks){
-    lines.push('📅 '+m.targetMonthName+'에는 수요일이 총 '+m.targetMonthWeeks+'회 있어요 (출결 문제없다는 전제로 계산)');
+  lines.push(lkor(light)+' '+score.total+'점 / 100점');
+  lines.push('출석 '+score.bd.abs+'/15 · 정시 '+score.bd.time+'/10 · 리퍼럴 '+score.bd.ref+'/20');
+  lines.push('비지터 '+score.bd.vis+'/20 · 1:1 '+score.bd.otwone+'/10 · 감사장 '+score.bd.tyfcb+'/15 · 교육 '+score.bd.train+'/10');
+  if(m.kind==='confirmed' && m.targetMonthWeeks){
+    lines.push('✅ '+m.targetMonthName+' 미팅 '+m.targetMonthWeeks+'회 모두 반영된 확정 점수예요');
+  } else if(m.kind==='ongoing' && m.targetMonthWeeks){
+    lines.push('📅 '+m.targetMonthName+'은 '+m.doneWeeksThisMonth+'회차까지 이미 반영됐고, 남은 '+extra+'회는 전부 출석한다고 가정하고 계산했어요 (이번 달 총 '+m.targetMonthWeeks+'회 중)');
+  } else if(m.kind==='future' && m.targetMonthWeeks){
+    lines.push('📅 '+m.targetMonthName+' 미팅 총 '+m.targetMonthWeeks+'회 있을 예정이에요 (전부 출석 전제로 계산)');
   }
   lines.push('');
-  // 출결 감점 소멸 일정
   var recLines=[];
   agg.months.forEach(function(mk){
     var md=MONTHLY[mk], mb=null;
     for(var j=0;j<md.members.length;j++) if(md.members[j].name===name){ mb=md.members[j]; break; }
-    if(!mb||(mb.A===0&&mb.L===0)) return;
+    if(!mb || (mb.A===0 && mb.L===0)) return;
     var pp=parseKeyStr(mk); if(!pp) return;
-    var ry=pp.year, rm=pp.month+6;
-    if(rm>12){ ry++; rm-=12; }
-    var desc=[];
-    if(mb.A>0) desc.push('결석 '+mb.A+'회');
-    if(mb.L>0) desc.push('지각 '+mb.L+'회');
+    var ry=pp.year, rm=pp.month+6; if(rm>12){ ry++; rm-=12; }
+    var desc=[]; if(mb.A>0) desc.push('결석 '+mb.A+'회'); if(mb.L>0) desc.push('지각 '+mb.L+'회');
     recLines.push({k:toKey(ry,rm), txt:'· '+pp.month+'월 '+desc.join('/')+' → '+ry+'년 '+rm+'월부터 계산 제외'});
   });
   if(recLines.length>0){
     recLines.sort(function(a,b){return a.k.localeCompare(b.k);});
-    lines.push('📅 출결 감점 소멸 일정 (해당 월 +6개월)');
+    lines.push('[출결 감점 소멸 일정] 해당 월 +6개월');
     recLines.forEach(function(r){ lines.push(r.txt); });
     lines.push('');
   }
@@ -1040,9 +1079,10 @@ function buildFeedbackText(name, mode){
     else { pushTarget('그린(70점)',70); }
   }
   lines.push('화이팅이에요!');
-  lines.push('- BNI 파이오니어 챕터 송승훈');
+  lines.push('- BNI '+CHAPTER+' 챕터 송승훈');
   return lines.join('\n');
 }
+
 $('copybtn').onclick = function(){
   if(!selName) return;
   var txt = buildFeedbackText(selName, selMode);
