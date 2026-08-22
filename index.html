@@ -611,7 +611,7 @@ $('syncbtn').onclick = function(){
 
 // ── 집계 ──────────────────────────────────────────────────────
 function aggregate(name, startKey, endKey){
-  var R = {P:0,A:0,L:0,M:0,S:0,RGI:0,RGO:0,V:0,M121:0,N:0,O:0,SPO:0,MT:0,totalWeeks:0,remainWeeks:0,months:[]};
+  var R = {P:0,A:0,L:0,M:0,S:0,RGI:0,RGO:0,V:0,M121:0,N:0,O:0,SPO:0,MT:0,chapterWeeks:0,totalWeeks:0,remainWeeks:0,months:[]};
   var allKeys = MONTHS.filter(function(k){return k>=startKey && k<=endKey;});
   var firstIdx = -1;
   for(var i=0;i<allKeys.length;i++){
@@ -626,8 +626,11 @@ function aggregate(name, startKey, endKey){
     R.P+=mb.P; R.A+=mb.A; R.L+=mb.L; R.M+=mb.M; R.S+=mb.S;
     R.RGI+=mb.RGI; R.RGO+=mb.RGO; R.V+=mb.V; R.M121+=mb.M121;
     R.N+=mb.N; R.O+=mb.O; R.SPO+=(mb.SPO||0);
-    R.MT+=(mb.P+mb.A+mb.L+mb.M+mb.S);   // (참고용, 한국 기준은 실제로 totalWeeks를 분모로 사용)
-    R.months.push(k); R.totalWeeks+=md.actualWeeks;
+    R.MT+=(mb.P+mb.A+mb.L+mb.M+mb.S);          // 본인 실제 미팅 기록 수
+    R.chapterWeeks+=md.actualWeeks;            // 챕터 전체 진행 주수(참고용)
+    R.months.push(k);
+    // ★ 분모 = 본인이 실제로 소속돼 있던 미팅 수 (신입/중도가입자 보정)
+    R.totalWeeks+=(mb.P+mb.A+mb.L+mb.M+mb.S);
   });
   if(validKeys.length>0){
     var lmd = MONTHLY[validKeys[validKeys.length-1]];
@@ -730,7 +733,7 @@ function renderTable(){
       '<td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>'+name+'</strong>'+
       '<span style="font-weight:900;font-size:13px;color:'+color+'">'+s.total+'</span>'+
       '<span class="badge '+light+'" style="font-size:10px;padding:1px 6px">'+lkor(light)+'</span></div></td>'+
-      '<td style="text-align:center;font-size:11px;color:var(--mut)">'+agg.totalWeeks+'주</td>'+
+      '<td style="text-align:center;font-size:11px;color:var(--mut)">'+agg.totalWeeks+'회</td>'+
       cell('결'+agg.A+'/지'+agg.L, absTime, 25)+
       cell((agg.RGI+agg.RGO)+'건', s.bd.ref, 20)+
       cell(agg.V+'명', s.bd.vis, 20)+
@@ -801,7 +804,7 @@ function modeAgg(name, mode){
   var kind='future', doneWeeksThisMonth=0;
   if(mode==='current'){
     agg=aggregate(name, rollingStart(ck), ck);
-    rangeLabel=rollingStart(ck)+' ~ '+ck+' 확정 ('+agg.totalWeeks+'주)';
+    rangeLabel=rollingStart(ck)+' ~ '+ck+' 확정 (본인 '+agg.totalWeeks+'회'+(agg.chapterWeeks&&agg.chapterWeeks!==agg.totalWeeks?' / 챕터 '+agg.chapterWeeks+'주':'')+')';
     modeLbl=mns[parseKeyStr(ck).month]+' 확정';
     kind='confirmed';
     targetMonthWeeks=MONTHLY[ck].actualWeeks; targetMonthName=mns[parseKeyStr(ck).month];
@@ -809,7 +812,7 @@ function modeAgg(name, mode){
   } else if(ok && mode===ok){
     agg=aggregate(name, rollingStart(ok), ok);
     extra=agg.remainWeeks;
-    rangeLabel=rollingStart(ok)+' ~ '+ok+' 진행중 ('+agg.totalWeeks+'주 + 남은 '+agg.remainWeeks+'주)';
+    rangeLabel=rollingStart(ok)+' ~ '+ok+' 진행중 (본인 '+agg.totalWeeks+'회 + 남은 '+agg.remainWeeks+'회)';
     modeLbl=mns[parseKeyStr(ok).month]+' 예상';
     kind='ongoing';
     targetMonthWeeks=MONTHLY[ok].fullWeeks; targetMonthName=mns[parseKeyStr(ok).month];
@@ -989,11 +992,11 @@ function renderActTable(agg, score, extra, m){
     {n:'정시(지각)', cur:remLate+'회'+(agg.L>=3?' (환산 후 잔여)':''), pts:score.bd.time, max:10,
      nd:null, std:'지각 0회=10점 / 1회=5 / 2회+=0 · 지각 3회=결석 1회로 환산'},
     {n:'리퍼럴 (T1+T2)', cur:ref+'건', pts:score.bd.ref, max:20,
-     nd:need(ref,1.2*W), u:'건', std:'만점 '+Math.ceil(1.2*W)+'건 = '+W+'주 × 주당 1.2'},
+     nd:need(ref,1.2*W), u:'건', std:'만점 '+Math.ceil(1.2*W)+'건 = 본인 '+W+'회 × 회당 1.2'},
     {n:'비지터', cur:agg.V+'명', pts:score.bd.vis, max:20,
-     nd:need(agg.V,0.6*W), u:'명', std:'만점 '+Math.ceil(0.6*W)+'명 = '+W+'주 × 주당 0.6'},
+     nd:need(agg.V,0.6*W), u:'명', std:'만점 '+Math.ceil(0.6*W)+'명 = 본인 '+W+'회 × 회당 0.6'},
     {n:'1:1 원투원', cur:agg.M121+'건', pts:score.bd.otwone, max:10,
-     nd:need(agg.M121,2*W), u:'건', std:'만점 '+Math.ceil(2*W)+'건 = '+W+'주 × 주당 2'},
+     nd:need(agg.M121,2*W), u:'건', std:'만점 '+Math.ceil(2*W)+'건 = 본인 '+W+'회 × 회당 2'},
     {n:'감사장', cur:won(agg.N), pts:score.bd.tyfcb, max:15,
      nd:agg.N>=100000000?0:null, std:'1억 이상=15점 / 5천만↑=10 / 2500만↑=5'},
     {n:'교육점수', cur:agg.O+'점', pts:score.bd.train, max:10,
@@ -1003,7 +1006,8 @@ function renderActTable(agg, score, extra, m){
     ' <b>'+m.targetMonthName+'은 '+m.doneWeeksThisMonth+'주차까지 실제 반영</b>, 남은 '+extra+'주는 출석 가정.' :
     (extra>0?' (남은 '+extra+'주 출석 가정 포함)':'');
   $('actnote').innerHTML = '<div style="font-size:11.5px;color:var(--mut);margin-bottom:8px;line-height:1.6">'+
-    '🇰🇷 <b>한국 표준 기준</b>이에요. 분모는 <b>6개월간 실제 진행 주수 '+W+'주</b>'+
+    '🇰🇷 <b>한국 표준 기준</b>이에요. 분모는 <b>본인이 소속돼 있던 미팅 '+W+'회</b>'+
+    (agg.chapterWeeks && agg.chapterWeeks!==W ? ' <span style="color:var(--mut)">(같은 기간 챕터 전체는 '+agg.chapterWeeks+'주 — 중도 가입이라 본인 기준으로 계산해요)</span>' : '')+
     ongoingNote+'예요.</div>';
   var html='<thead><tr><th>항목</th><th>현재 누적</th><th>현재 점수</th><th>만점까지</th><th>만점 기준</th></tr></thead><tbody>';
   rows.forEach(function(r){
